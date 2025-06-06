@@ -55,11 +55,9 @@ grafo *le_grafo(FILE *f) {
         char nome_vertice[MAX_NAME];
 
         if (sscanf(line, "%s", nome_vertice) != 1) {
-            fprintf(stderr, "Erro ao ler o nome do vértice.\n");
             continue;
         }   
         if( nome_vertice[0] == '\0' || nome_vertice[0] == '/') {
-            printf("Linha vazia ou comentário: %s", line);
             continue; 
         }
 
