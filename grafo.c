@@ -54,14 +54,12 @@ grafo *le_grafo(FILE *f) {
     while (fgets(line, sizeof(line), f)) {
         char nome_vertice[MAX_NAME];
 
-        if (sscanf(line, "%s", nome_vertice) != 1) {
+        if (sscanf(line, "%s", nome_vertice) != 1) 
             continue;
-        }   
-        if( nome_vertice[0] == '\0' || nome_vertice[0] == '/') {
+        
+        if( nome_vertice[0] == '\0' || nome_vertice[0] == '/') 
             continue; 
-        }
 
-        printf("Lendo vértice: %s\n", nome_vertice);
         vertice_t *v = malloc(sizeof(vertice_t));
         if (!v) {
             fprintf(stderr, "Erro ao alocar memória para o vértice.\n");
@@ -69,6 +67,7 @@ grafo *le_grafo(FILE *f) {
             return NULL;
         }
         strncpy(v->nome, nome_vertice, MAX_NAME);
+        printf("Lendo vértice: %s\n", v->nome);
         v->adj = NULL;
         v->prox = g->vertices;
         g->vertices = v;
