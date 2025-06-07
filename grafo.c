@@ -24,6 +24,63 @@ typedef struct grafo {
 } grafo;
 
 
+static char *le_nome(FILE *f) {
+    char nome[MAX_NAME];
+    char *strnome = malloc(MAX_NAME);
+    while(fgets(nome, sizeof(nome), f)) {
+        if (nome[0] != '/' && nome[1] != '/' && nome[0] != '\n' && nome[0] != '\0') {
+            strncpy(strnome, nome, MAX_NAME);
+            return strnome;
+        }
+    }
+    // Retorna NULL se não encontrar um nome válido
+    return NULL; 
+}
+
+static vertice_t *encontra_ou_cria_vertice(grafo *g, const char *nome) {
+    vertice_t *v = g->vertices;
+    while (v) {
+        if (strcmp(v->nome, nome) == 0) return v;
+        v = v->prox;
+    }
+
+    // cria novo vértice
+    vertice_t *novo = malloc(sizeof(vertice_t));
+    strcpy(novo->nome, nome);
+    novo->adj = NULL;
+    novo->prox = g->vertices;
+    g->vertices = novo;
+    return novo;
+}
+
+static void printa_grafo(grafo *g) {
+    if (!g) {
+        printf("Grafo vazio.\n");
+        return;
+    }
+    
+    printf("Grafo: %s\n", g->nome);
+    vertice_t *v = g->vertices;
+    while (v) {
+        printf("Vértice: %s\n", v->nome);
+        aresta_t *a = v->adj;
+        while (a) {
+            printf("  Aresta para %s com peso %d\n", a->destino, a->peso);
+            a = a->prox;
+        }
+        v = v->prox;
+    }
+}
+
+static void adiciona_aresta(grafo *g, const char *origem, const char *destino, int peso) {
+    vertice_t *v = encontra_ou_cria_vertice(g, origem);
+    aresta_t *a = malloc(sizeof(aresta_t));
+    strcpy(a->destino, destino);
+    a->peso = peso;
+    a->prox = v->adj;
+    v->adj = a;
+}
+
 grafo *le_grafo(FILE *f) {
     grafo *g = malloc(sizeof(grafo));
     if (!g) {
@@ -31,66 +88,31 @@ grafo *le_grafo(FILE *f) {
         return NULL;
     }
 
-    // procura o nome do grafo na primeira linha do arquivo que não é um comentário ou vazia
-    while (fgets(g->nome, sizeof(g->nome), f)) {
-        if (g->nome[0] != '/' && g->nome[1] != '/' && g->nome[0] != '\n') {
-            break; // Encontrou uma linha válida
-        }
-    }
-    if (g->nome[0] == '\0') {
-        fprintf(stderr, "Erro ao ler o nome do grafo ou arquivo vazio.\n");
+    char *nome = le_nome(f);
+    if (!nome) {
+        fprintf(stderr, "Erro ao ler o nome do grafo.\n");
         free(g);
         return NULL;
     }
     
-    // Remove o newline do nome do grafo
-    size_t len = strlen(g->nome);
-    if (len > 0 && g->nome[len - 1] == '\n') {
-        g->nome[len - 1] = '\0';
-    }
-
+    strncpy(g->nome, nome, MAX_NAME);
+    free(nome);
+    
     g->vertices = NULL;
     char line[MAX_LINE];
     while (fgets(line, sizeof(line), f)) {
-        char nome_vertice[MAX_NAME];
+        if (strncmp(line, "//", 2) == 0) continue;
+        if (strlen(line) > 0 && line[strlen(line)-1] == '\n') line[strlen(line)-1] = '\0';
 
-        if (sscanf(line, "%s", nome_vertice) != 1) 
-            continue;
-        
-        if( nome_vertice[0] == '\0' || nome_vertice[0] == '/') 
-            continue; 
-
-        vertice_t *v = malloc(sizeof(vertice_t));
-        if (!v) {
-            fprintf(stderr, "Erro ao alocar memória para o vértice.\n");
-            free(g);
-            return NULL;
-        }
-        strncpy(v->nome, nome_vertice, MAX_NAME);
-        printf("Lendo vértice: %s\n", v->nome);
-        v->adj = NULL;
-        v->prox = g->vertices;
-        g->vertices = v;
-
-        char destino[MAX_NAME];
+        char v1[MAX_NAME], v2[MAX_NAME];
         int peso;
-        while (sscanf(line, "%s %d", destino, &peso) == 2) {
-            aresta_t *a = malloc(sizeof(aresta_t));
-            if (!a) {
-                fprintf(stderr, "Erro ao alocar memória para a aresta.\n");
-                free(v);
-                free(g);
-                return NULL;
-            }
-            strncpy(a->destino, destino, MAX_NAME);
-            a->peso = peso;
-            a->prox = v->adj;
-            v->adj = a;
-
-            // Ler a próxima linha
-            if (!fgets(line, sizeof(line), f)) {
-                break; // Fim do arquivo
-            }
+        if (sscanf(line, "%s -- %s %d", v1, v2, &peso) >= 2) {
+            if (sscanf(line, "%*s -- %*s %d", &peso) != 1) 
+                peso = 1; // peso opcional
+            adiciona_aresta(g, v1, v2, peso);
+            adiciona_aresta(g, v2, v1, peso); 
+        } else {
+            encontra_ou_cria_vertice(g, line);
         }
     }
 
