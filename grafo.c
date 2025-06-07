@@ -111,11 +111,14 @@ grafo *le_grafo(FILE *f) {
                 peso = 1; // peso opcional
             adiciona_aresta(g, v1, v2, peso);
             adiciona_aresta(g, v2, v1, peso); 
-        } else {
+        } else if (sscanf(line, "%s", v1) == 1) {
             encontra_ou_cria_vertice(g, line);
+        } else {
+            continue;
         }
     }
 
+    printa_grafo(g);
     return g;
 }
 
