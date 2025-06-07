@@ -125,7 +125,23 @@ grafo *le_grafo(FILE *f) {
 // devolve 1 em caso de sucesso e 0 em caso de erro
 
 unsigned int destroi_grafo(grafo *g) {
-    return g ? (free(g), 1) : 0;
+    if (!g) return 0;
+
+    vertice_t *v = g->vertices;
+    while (v) {
+        aresta_t *a = v->adj;
+        while (a) {
+            aresta_t *temp = a;
+            a = a->prox;
+            free(temp);
+        }
+        vertice_t *temp = v;
+        v = v->prox;
+        free(temp);
+    }
+    
+    free(g);
+    return 1; // sucesso
 }
 
 //------------------------------------------------------------------------------
