@@ -381,14 +381,99 @@ char *diametros(grafo *g) {
     return res;
 }
 
-//------------------------------------------------------------------------------
-// devolve uma "string" com os nomes dos vértices de corte de g em
-// ordem alfabética, separados por brancos
+static void dfs_articulacao(int u, int parent, vertice_t **vmap, int n, int *vis, int *tin, int *low, int *is_corte, int *timer) {
+    vis[u] = 1;
+    tin[u] = low[u] = (*timer)++;
+    int filhos = 0;
+
+    for (aresta_t *a = vmap[u]->adj; a; a = a->prox) {
+        int v = -1;
+
+        // Busca o índice do destino no vmap
+        for (int i = 0; i < n; i++) {
+            if (strcmp(vmap[i]->nome, a->destino) == 0) {
+                v = i;
+                break;
+            }
+        }
+
+        if (v == -1 || v == parent) continue;
+
+        if (vis[v]) {
+            // Aresta de retorno
+            if (low[u] > tin[v])
+                low[u] = tin[v];
+        } else {
+            // Aresta de árvore
+            dfs_articulacao(v, u, vmap, n, vis, tin, low, is_corte, timer);
+
+            if (low[u] > low[v])
+                low[u] = low[v];
+
+            if (low[v] >= tin[u] && parent != -1)
+                is_corte[u] = 1;
+
+            filhos++;
+        }
+    }
+
+    if (parent == -1 && filhos > 1)
+        is_corte[u] = 1;
+}
+
+static int cmp_nome(const void *a, const void *b) {
+    const char * const *s1 = (const char * const *)a;
+    const char * const *s2 = (const char * const *)b;
+    return strcmp(*s1, *s2);
+}
+
 
 char *vertices_corte(grafo *g) {
-    // Implementação para encontrar os vértices de corte
-    // Retorna uma string com os nomes dos vértices de corte separados por brancos
-    return NULL; // Placeholder
+    vertice_t *vmap[MAX_VERTICES];
+    int n = 0;
+
+    // Mapeia vértices
+    for (vertice_t *v = g->vertices; v; v = v->prox)
+        vmap[n++] = v;
+
+    int vis[MAX_VERTICES] = {0};
+    int tin[MAX_VERTICES] = {0};
+    int low[MAX_VERTICES] = {0};
+    int is_corte[MAX_VERTICES] = {0};
+    int timer = 0;
+
+    for (int i = 0; i < n; i++) {
+        if (!vis[i]) {
+            dfs_articulacao(i, -1, vmap, n, vis, tin, low, is_corte, &timer);
+        }
+    }
+
+    // Coleta os nomes dos vértices de corte
+    char *nomes[MAX_VERTICES];
+    int n_cortes = 0;
+    for (int i = 0; i < n; i++) {
+        if (is_corte[i]) {
+            nomes[n_cortes++] = vmap[i]->nome;
+        }
+    }
+
+    // Ordena os nomes alfabeticamente
+    qsort(nomes, (size_t)n_cortes, sizeof(char *), cmp_nome);
+
+    // Constrói a string final
+    char *res = malloc((size_t)n_cortes * 64);
+    res[0] = '\0';
+
+    for (int i = 0; i < n_cortes; i++) {
+        strcat(res, nomes[i]);
+        strcat(res, " ");
+    }
+
+    size_t len = strlen(res);
+    if (len > 0 && res[len - 1] == ' ')
+        res[len - 1] = '\0';
+
+    return res;
 }
 
 //------------------------------------------------------------------------------
