@@ -2,12 +2,12 @@
 #include<stdlib.h>
 #include<string.h>
 #include <stdbool.h>
+#include <limits.h>
 #include "grafo.h"
 
 #define MAX_LINE 2048
 #define MAX_NAME 128
-#define MAX_DIAMS 512
-#define MAX_STRING 4096
+#define MAX_VERTICES 1024
 
 typedef struct aresta_t {
     char destino[MAX_NAME];
@@ -30,6 +30,7 @@ typedef struct grafo {
 #define COR_1 1
 #define COR_2 2
 #define COR_NAO_VISITADA -1
+#define INF INT_MAX
 
 static char *le_nome(FILE *f) {
     char nome[MAX_NAME];
@@ -40,8 +41,6 @@ static char *le_nome(FILE *f) {
             return strnome;
         }
     }
-    // Remove o '\n' do final da string
-    size_t len = strlen(strnome);
 
     // Retorna NULL se não encontrar um nome válido
     return NULL; 
@@ -263,9 +262,9 @@ unsigned int n_componentes(grafo *g) {
                 vertice_t *v_atual = fila[ini++];
                 for (aresta_t *a = v_atual->adj; a; a = a->prox) {
                     vertice_t *v_destino = g->vertices;
-                    while (v_destino && strcmp(v_destino->nome, a->destino) != 0) {
+                    while (v_destino && strcmp(v_destino->nome, a->destino) != 0) 
                         v_destino = v_destino->prox;
-                    }
+                    
                     if (v_destino && v_destino->cor == COR_NAO_VISITADA) {
                         v_destino->cor = COR_1; // Marca como visitado
                         fila[fim++] = v_destino;
@@ -277,115 +276,107 @@ unsigned int n_componentes(grafo *g) {
     return num_componentes;
 }
 
-// função auxiliar para encontrar vértice pelo nome
-static vertice_t *busca_vertice(grafo *g, const char *nome) {
-    for (vertice_t *v = g->vertices; v; v = v->prox) {
-        if (strcmp(v->nome, nome) == 0)
-            return v;
-    }
-    return NULL;
+static int mapear_vertices(grafo *g, vertice_t **vmap) {
+    int n = 0;
+    for (vertice_t *v = g->vertices; v; v = v->prox)
+        vmap[n++] = v;
+    return n;
 }
 
-// função BFS que retorna o vértice mais distante e suas distâncias
-static vertice_t *bfs_mais_distante(vertice_t *inicio, grafo *g, int *dist) {
-    vertice_t *fila[1024];
-    int ini = 0, fim = 0;
+// Retorna o índice de um vértice no vmap
+static int indice_vertice(vertice_t *v, vertice_t **vmap, int n) {
+    for (int i = 0; i < n; i++)
+        if (vmap[i] == v) return i;
+    return -1;
+}
 
-    for (vertice_t *v = g->vertices; v; v = v->prox) {
-        v->cor = COR_NAO_VISITADA;
-        dist[v - g->vertices] = -1;
-    }
+static int dijkstra_mais_distante(int start, vertice_t **vmap, int n, int *dist, int *visitado) {
+    int usado[MAX_VERTICES] = {0};
 
-    fila[fim++] = inicio;
-    inicio->cor = 1;
-    dist[inicio - g->vertices] = 0;
+    for (int i = 0; i < n; i++) 
+        dist[i] = INF;
 
-    vertice_t *mais_distante = inicio;
-    int max_dist = 0;
+    dist[start] = 0;
 
-    while (ini < fim) {
-        vertice_t *v = fila[ini++];
-        for (aresta_t *a = v->adj; a; a = a->prox) {
-            vertice_t *viz = busca_vertice(g, a->destino);
-            if (viz && viz->cor == COR_NAO_VISITADA) {
-                viz->cor = 1;
-                dist[viz - g->vertices] = dist[v - g->vertices] + 1;
-                fila[fim++] = viz;
+    for (int i = 0; i < n; i++) {
+        int u = -1;
+        for (int j = 0; j < n; j++) {
+            if (!usado[j] && (u == -1 || dist[j] < dist[u])) {
+                u = j;
+            }
+        }
 
-                if (dist[viz - g->vertices] > max_dist) {
-                    max_dist = dist[viz - g->vertices];
-                    mais_distante = viz;
+        if (dist[u] == INF) 
+            break;
+        usado[u] = 1;
+        visitado[u] = 1;
+
+        vertice_t *vu = vmap[u];
+        for (aresta_t *a = vu->adj; a; a = a->prox) {
+            for (int v = 0; v < n; v++) {
+                if (strcmp(vmap[v]->nome, a->destino) == 0) {
+                    if (dist[u] + a->peso < dist[v]) 
+                        dist[v] = dist[u] + a->peso;
+                    break;
                 }
             }
         }
     }
-    return mais_distante;
+
+    int max_dist = 0, idx = start;
+    for (int i = 0; i < n; i++) {
+        if (dist[i] != INF && dist[i] > max_dist) {
+            max_dist = dist[i];
+            idx = i;
+        }
+    }
+    return idx;
 }
 
-// calcula o diâmetro de uma componente a partir de um vértice
-static int calcula_diametro_componente(vertice_t *v, grafo *g, unsigned char *visitado) {
-    int dist[1024];
+static int calcula_diametro_componente(int start, vertice_t **vmap, int n, int *visitado) {
+    int dist[MAX_VERTICES];
+    int u = dijkstra_mais_distante(start, vmap, n, dist, visitado);
 
-    // primeira BFS
-    vertice_t *mais_dist = bfs_mais_distante(v, g, dist);
+    // reset visitado, porque o segundo Dijkstra vai atualizar de novo
+    for (int i = 0; i < n; i++) 
+        visitado[i] = 0;
 
-    // marca todos como visitados no componente
-    for (vertice_t *w = g->vertices; w; w = w->prox) {
-        if (w->cor != COR_NAO_VISITADA) {
-            visitado[w - g->vertices] = 1;
+    int v = dijkstra_mais_distante(u, vmap, n, dist, visitado);
+    return dist[v];
+}
+
+char *diametros(grafo *g) {
+    vertice_t *vmap[MAX_VERTICES];
+    int n = mapear_vertices(g, vmap);
+    int visitado[MAX_VERTICES] = {0};
+    int diams[MAX_VERTICES], n_diams = 0;
+
+    for (int i = 0; i < n; i++) {
+        if (!visitado[i]) {
+            int d = calcula_diametro_componente(i, vmap, n, visitado);
+            diams[n_diams++] = d;
         }
     }
 
-    // segunda BFS a partir do mais distante
-    bfs_mais_distante(mais_dist, g, dist);
-
-    // diâmetro = maior distância encontrada
-    int diam = 0;
-    for (vertice_t *w = g->vertices; w; w = w->prox) {
-        if (dist[w - g->vertices] > diam)
-            diam = dist[w - g->vertices];
-    }
-
-    return diam;
-}
-
-// função principal
-char *diametros(grafo *g) {
-    if (!g) return NULL;
-
-    int diams[MAX_DIAMS];
-    int n = 0;
-
-    unsigned char visitado[1024] = {0};
-
-    for (vertice_t *v = g->vertices; v; v = v->prox) {
-        printf("Vértice: %s\n", v->nome);
-        if (visitado[v - g->vertices]) continue;
-
-        int d = calcula_diametro_componente(v, g, visitado);
-        diams[n++] = d;
-    }
-
-    // ordena diâmetros
-    for (int i = 0; i < n-1; i++) {
-        for (int j = i+1; j < n; j++) {
+    // Ordena os diâmetros
+    for (int i = 0; i < n_diams; i++) {
+        for (int j = i + 1; j < n_diams; j++) {
             if (diams[i] > diams[j]) {
-                int tmp = diams[i];
-                diams[i] = diams[j];
-                diams[j] = tmp;
+                int tmp = diams[i]; diams[i] = diams[j]; diams[j] = tmp;
             }
         }
     }
 
-    // cria a string de saída
-    char *res = malloc(MAX_STRING);
+    // Cria string resultado
+    size_t tam = (size_t)n_diams * 12;
+    char *res = malloc(tam);
     res[0] = '\0';
-    char buffer[32];
-    for (int i = 0; i < n; i++) {
-        sprintf(buffer, "%d", diams[i]);
+    char buffer[16];
+    for (int i = 0; i < n_diams; i++) {
+        sprintf(buffer, "%d ", diams[i]);
         strcat(res, buffer);
-        if (i < n - 1) strcat(res, " ");
     }
+    if (n_diams > 0) res[strlen(res) - 1] = '\0'; // remove espaço final
 
     return res;
 }
