@@ -1,6 +1,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include <stdbool.h>
 #include "grafo.h"
 
 #define MAX_LINE 2048
@@ -16,6 +17,7 @@ typedef struct vertice_t {
     char nome[MAX_NAME];
     aresta_t *adj;
     struct vertice_t *prox;
+    int cor; 
 } vertice_t;
 
 typedef struct grafo {
@@ -23,6 +25,9 @@ typedef struct grafo {
     vertice_t *vertices;
 } grafo;
 
+#define COR_1 1
+#define COR_2 2
+#define COR_NAO_VISITADA -1
 
 static char *le_nome(FILE *f) {
     char nome[MAX_NAME];
@@ -108,7 +113,7 @@ grafo *le_grafo(FILE *f) {
         int peso;
         if (sscanf(line, "%s -- %s %d", v1, v2, &peso) >= 2) {
             if (sscanf(line, "%*s -- %*s %d", &peso) != 1) 
-                peso = 1; // peso opcional
+                peso = 1; 
             adiciona_aresta(g, v1, v2, peso);
             adiciona_aresta(g, v2, v1, peso); 
         } else if (sscanf(line, "%s", v1) == 1) {
@@ -118,14 +123,8 @@ grafo *le_grafo(FILE *f) {
         }
     }
 
-    printa_grafo(g);
     return g;
 }
-
-//------------------------------------------------------------------------------
-// desaloca toda a estrutura de dados alocada em g
-//
-// devolve 1 em caso de sucesso e 0 em caso de erro
 
 unsigned int destroi_grafo(grafo *g) {
     if (!g) return 0;
@@ -144,32 +143,73 @@ unsigned int destroi_grafo(grafo *g) {
     }
     
     free(g);
-    return 1; // sucesso
+    return 1;
 }
-
-//------------------------------------------------------------------------------
-// devolve o nome de g
 
 char *nome(grafo *g) {
     return g ? g->nome : NULL;
 }
 
-//------------------------------------------------------------------------------
-// devolve 1 se g é bipartido e 0 caso contrário
-
+/* se tem ciclo impar = 0
+    se é acíclico = 1
+*/
 unsigned int bipartido(grafo *g) {
-    // Implementação da verificação de bipartição
-    // Retorna 1 se bipartido, 0 caso contrário
-    return 0; // Placeholder
+    if (!g) return 1;
+
+    // Inicializa todas as cores como não visitadas
+    for (vertice_t *v = g->vertices; v; v = v->prox) 
+        v->cor = COR_NAO_VISITADA;
+
+    // Para cada componente desconexo do grafo
+    for (vertice_t *v_inicio = g->vertices; v_inicio; v_inicio = v_inicio->prox) {
+        if (v_inicio->cor != COR_NAO_VISITADA) continue;
+
+        // BFS manual com fila
+        vertice_t *fila[1024];
+        int ini = 0, fim = 0;
+
+        v_inicio->cor = COR_1;
+        fila[fim++] = v_inicio;
+
+        while (ini < fim) {
+            vertice_t *v_atual = fila[ini++];
+            int cor_atual = v_atual->cor;
+            int cor_vizinho = (cor_atual == COR_1) ? COR_2 : COR_1;
+
+            for (aresta_t *a = v_atual->adj; a; a = a->prox) {
+                // Achar o vértice de destino pelo nome
+                vertice_t *v_destino = g->vertices;
+                while (v_destino && strcmp(v_destino->nome, a->destino) != 0) {
+                    v_destino = v_destino->prox;
+                }
+
+                if (!v_destino) continue; // vértice não encontrado
+
+                if (v_destino->cor == COR_NAO_VISITADA) {
+                    v_destino->cor = cor_vizinho;
+                    fila[fim++] = v_destino;
+                } else if (v_destino->cor == cor_atual) {
+                    // Encontramos dois vértices adjacentes com mesma cor => ciclo ímpar
+                    return 0;
+                }
+            }
+        }
+    }
+
+    return 1;
 }
 
-//------------------------------------------------------------------------------
-// devolve o número de vértices em g
-
 unsigned int n_vertices(grafo *g) {
-    // Implementação para contar o número de vértices
-    // Retorna o número de vértices
-    return 0; // Placeholder
+    unsigned int num_vertices = 0;
+    if (!g) return num_vertices;
+
+    vertice_t *v = g->vertices;
+    while (v) {
+        num_vertices++;
+        v = v->prox;
+    }
+        
+    return num_vertices;
 }
 
 //------------------------------------------------------------------------------
