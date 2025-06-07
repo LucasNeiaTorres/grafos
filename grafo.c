@@ -6,6 +6,8 @@
 
 #define MAX_LINE 2048
 #define MAX_NAME 128
+#define MAX_DIAMS 512
+#define MAX_STRING 4096
 
 typedef struct aresta_t {
     char destino[MAX_NAME];
@@ -38,6 +40,9 @@ static char *le_nome(FILE *f) {
             return strnome;
         }
     }
+    // Remove o '\n' do final da string
+    size_t len = strlen(strnome);
+
     // Retorna NULL se não encontrar um nome válido
     return NULL; 
 }
@@ -98,6 +103,12 @@ grafo *le_grafo(FILE *f) {
         fprintf(stderr, "Erro ao ler o nome do grafo.\n");
         free(g);
         return NULL;
+    }
+
+    // Remove o '\n' do final do nome
+    size_t len = strlen(nome);
+    if (len > 0 && nome[len - 1] == '\n') {
+        nome[len - 1] = '\0';
     }
     
     strncpy(g->nome, nome, MAX_NAME);
@@ -266,14 +277,117 @@ unsigned int n_componentes(grafo *g) {
     return num_componentes;
 }
 
-//------------------------------------------------------------------------------
-// devolve uma "string" com os diâmetros dos componentes de g separados por brancos
-// em ordem não decrescente
+// função auxiliar para encontrar vértice pelo nome
+static vertice_t *busca_vertice(grafo *g, const char *nome) {
+    for (vertice_t *v = g->vertices; v; v = v->prox) {
+        if (strcmp(v->nome, nome) == 0)
+            return v;
+    }
+    return NULL;
+}
 
+// função BFS que retorna o vértice mais distante e suas distâncias
+static vertice_t *bfs_mais_distante(vertice_t *inicio, grafo *g, int *dist) {
+    vertice_t *fila[1024];
+    int ini = 0, fim = 0;
+
+    for (vertice_t *v = g->vertices; v; v = v->prox) {
+        v->cor = COR_NAO_VISITADA;
+        dist[v - g->vertices] = -1;
+    }
+
+    fila[fim++] = inicio;
+    inicio->cor = 1;
+    dist[inicio - g->vertices] = 0;
+
+    vertice_t *mais_distante = inicio;
+    int max_dist = 0;
+
+    while (ini < fim) {
+        vertice_t *v = fila[ini++];
+        for (aresta_t *a = v->adj; a; a = a->prox) {
+            vertice_t *viz = busca_vertice(g, a->destino);
+            if (viz && viz->cor == COR_NAO_VISITADA) {
+                viz->cor = 1;
+                dist[viz - g->vertices] = dist[v - g->vertices] + 1;
+                fila[fim++] = viz;
+
+                if (dist[viz - g->vertices] > max_dist) {
+                    max_dist = dist[viz - g->vertices];
+                    mais_distante = viz;
+                }
+            }
+        }
+    }
+    return mais_distante;
+}
+
+// calcula o diâmetro de uma componente a partir de um vértice
+static int calcula_diametro_componente(vertice_t *v, grafo *g, unsigned char *visitado) {
+    int dist[1024];
+
+    // primeira BFS
+    vertice_t *mais_dist = bfs_mais_distante(v, g, dist);
+
+    // marca todos como visitados no componente
+    for (vertice_t *w = g->vertices; w; w = w->prox) {
+        if (w->cor != COR_NAO_VISITADA) {
+            visitado[w - g->vertices] = 1;
+        }
+    }
+
+    // segunda BFS a partir do mais distante
+    bfs_mais_distante(mais_dist, g, dist);
+
+    // diâmetro = maior distância encontrada
+    int diam = 0;
+    for (vertice_t *w = g->vertices; w; w = w->prox) {
+        if (dist[w - g->vertices] > diam)
+            diam = dist[w - g->vertices];
+    }
+
+    return diam;
+}
+
+// função principal
 char *diametros(grafo *g) {
-    // Implementação para calcular os diâmetros dos componentes
-    // Retorna uma string com os diâmetros separados por brancos
-    return NULL; // Placeholder
+    if (!g) return NULL;
+
+    int diams[MAX_DIAMS];
+    int n = 0;
+
+    unsigned char visitado[1024] = {0};
+
+    for (vertice_t *v = g->vertices; v; v = v->prox) {
+        printf("Vértice: %s\n", v->nome);
+        if (visitado[v - g->vertices]) continue;
+
+        int d = calcula_diametro_componente(v, g, visitado);
+        diams[n++] = d;
+    }
+
+    // ordena diâmetros
+    for (int i = 0; i < n-1; i++) {
+        for (int j = i+1; j < n; j++) {
+            if (diams[i] > diams[j]) {
+                int tmp = diams[i];
+                diams[i] = diams[j];
+                diams[j] = tmp;
+            }
+        }
+    }
+
+    // cria a string de saída
+    char *res = malloc(MAX_STRING);
+    res[0] = '\0';
+    char buffer[32];
+    for (int i = 0; i < n; i++) {
+        sprintf(buffer, "%d", diams[i]);
+        strcat(res, buffer);
+        if (i < n - 1) strcat(res, " ");
+    }
+
+    return res;
 }
 
 //------------------------------------------------------------------------------
