@@ -212,11 +212,22 @@ unsigned int n_vertices(grafo *g) {
     return num_vertices;
 }
 
-//------------------------------------------------------------------------------
-// devolve o número de arestas em g
-
 unsigned int n_arestas(grafo *g) {
-    return 0; // Placeholder
+    unsigned int num_arestas = 0;
+    if (!g) return num_arestas;
+
+    vertice_t *v = g->vertices;
+    while (v) {
+        aresta_t *a = v->adj;
+        while (a) {
+            num_arestas++;
+            a = a->prox;
+        }
+        v = v->prox;
+    }
+    // Cada aresta é contada duas vezes (uma para cada vértice), então dividimos por 2
+    num_arestas /= 2;
+    return num_arestas;
 }
 
 //------------------------------------------------------------------------------
