@@ -230,13 +230,40 @@ unsigned int n_arestas(grafo *g) {
     return num_arestas;
 }
 
-//------------------------------------------------------------------------------
-// devolve o número de componentes em g
 
 unsigned int n_componentes(grafo *g) {
-    // Implementação para contar o número de componentes
-    // Retorna o número de componentes
-    return 0; // Placeholder
+    if (!g) return 0;
+    unsigned int num_componentes = 0;
+    // Inicializa todas as cores como não visitadas 
+    for (vertice_t *v = g->vertices; v; v = v->prox) 
+        v->cor = COR_NAO_VISITADA;
+    // Para cada vértice, se não foi visitado, incrementa o contador de componentes
+    for (vertice_t *v = g->vertices; v; v = v->prox) {
+        if (v->cor == COR_NAO_VISITADA) {
+            num_componentes++;
+            // BFS manual para marcar todos os vértices conectados
+            vertice_t *fila[1024];
+            int ini = 0, fim = 0;
+
+            v->cor = COR_1; // Marca como visitado
+            fila[fim++] = v;
+
+            while (ini < fim) {
+                vertice_t *v_atual = fila[ini++];
+                for (aresta_t *a = v_atual->adj; a; a = a->prox) {
+                    vertice_t *v_destino = g->vertices;
+                    while (v_destino && strcmp(v_destino->nome, a->destino) != 0) {
+                        v_destino = v_destino->prox;
+                    }
+                    if (v_destino && v_destino->cor == COR_NAO_VISITADA) {
+                        v_destino->cor = COR_1; // Marca como visitado
+                        fila[fim++] = v_destino;
+                    }
+                }
+            }
+        }
+    }   
+    return num_componentes;
 }
 
 //------------------------------------------------------------------------------
