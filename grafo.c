@@ -62,25 +62,6 @@ static vertice_t *encontra_ou_cria_vertice(grafo *g, const char *nome) {
     return novo;
 }
 
-static void printa_grafo(grafo *g) {
-    if (!g) {
-        printf("Grafo vazio.\n");
-        return;
-    }
-    
-    printf("Grafo: %s\n", g->nome);
-    vertice_t *v = g->vertices;
-    while (v) {
-        printf("Vértice: %s\n", v->nome);
-        aresta_t *a = v->adj;
-        while (a) {
-            printf("  Aresta para %s com peso %d\n", a->destino, a->peso);
-            a = a->prox;
-        }
-        v = v->prox;
-    }
-}
-
 static void adiciona_aresta(grafo *g, const char *origem, const char *destino, int peso) {
     vertice_t *v = encontra_ou_cria_vertice(g, origem);
     aresta_t *a = malloc(sizeof(aresta_t));
@@ -283,13 +264,6 @@ static int mapear_vertices(grafo *g, vertice_t **vmap) {
     return n;
 }
 
-// Retorna o índice de um vértice no vmap
-static int indice_vertice(vertice_t *v, vertice_t **vmap, int n) {
-    for (int i = 0; i < n; i++)
-        if (vmap[i] == v) return i;
-    return -1;
-}
-
 static int dijkstra_mais_distante(int start, vertice_t **vmap, int n, int *dist, int *visitado) {
     int usado[MAX_VERTICES] = {0};
 
@@ -421,10 +395,12 @@ static void dfs_articulacao(int u, int parent, vertice_t **vmap, int n, int *vis
         is_corte[u] = 1;
 }
 
-static int cmp_nome(const void *a, const void *b) {
-    const char * const *s1 = (const char * const *)a;
-    const char * const *s2 = (const char * const *)b;
-    return strcmp(*s1, *s2);
+// Função de comparação para qsort, para ordenar um array de strings (char **)
+static int comparar_strings(const void *a, const void *b) {
+    char * const *string_a = a;
+    char * const *string_b = b;
+
+    return strcmp(*string_a, *string_b);
 }
 
 
@@ -458,7 +434,7 @@ char *vertices_corte(grafo *g) {
     }
 
     // Ordena os nomes alfabeticamente
-    qsort(nomes, (size_t)n_cortes, sizeof(char *), cmp_nome);
+    qsort(nomes, (size_t)n_cortes, sizeof(char *), comparar_strings);
 
     // Constrói a string final
     char *res = malloc((size_t)n_cortes * 64);
@@ -476,13 +452,87 @@ char *vertices_corte(grafo *g) {
     return res;
 }
 
-//------------------------------------------------------------------------------
-// devolve uma "string" com as arestas de corte de g em ordem alfabética, separadas por brancos
-// cada aresta é o par de nomes de seus vértices em ordem alfabética, separadas por brancos
-//
-// por exemplo, se as arestas de corte são {z, a}, {x, b} e {y, c}, a resposta será a string
-// "a z b x c y"
+static void dfs(int u, int parent, vertice_t **vmap, int n, int *vis, int *tin, int *low, int *tempo, char **arestas, size_t *n_arestas) {
+    vis[u] = 1;
+    tin[u] = low[u] = (*tempo)++;
+
+    for (aresta_t *a = vmap[u]->adj; a; a = a->prox) {
+        int v = -1;
+        for (int i = 0; i < n; i++) {
+            if (strcmp(vmap[i]->nome, a->destino) == 0) {
+                v = i;
+                break;
+            }
+        }
+
+        if (v == -1 || v == parent) continue;
+
+        if (vis[v]) {
+            if (low[u] > tin[v])
+                low[u] = tin[v];
+        } else {
+            dfs(v, u, vmap, n, vis, tin, low, tempo, arestas, n_arestas);
+            if (low[u] > low[v])
+                low[u] = low[v];
+
+            if (low[v] > tin[u]) {
+                // Aresta de corte encontrada
+                char *linha = malloc(2 * MAX_NAME + 2);
+                if (!linha) continue;
+
+                if (strcmp(vmap[u]->nome, vmap[v]->nome) < 0)
+                    sprintf(linha, "%s %s", vmap[u]->nome, vmap[v]->nome);
+                else
+                    sprintf(linha, "%s %s", vmap[v]->nome, vmap[u]->nome);
+
+                arestas[(*n_arestas)++] = linha;
+            }
+        }
+    }
+}
 
 char *arestas_corte(grafo *g) {
-    return NULL; // Placeholder
+    if (!g) return NULL;
+
+    vertice_t *vmap[MAX_VERTICES];
+    int n = mapear_vertices(g, vmap);
+
+    int vis[MAX_VERTICES] = {0};
+    int tin[MAX_VERTICES], low[MAX_VERTICES];
+    int tempo = 0;
+
+    // Aloca espaço grande o suficiente para guardar todas as arestas
+    char *saida = malloc(MAX_VERTICES * MAX_VERTICES * MAX_NAME);
+    if (!saida) return NULL;
+    saida[0] = '\0';
+
+    // Lista temporária de strings de arestas (ALOCADA NA HEAP)
+    char **arestas = malloc(MAX_VERTICES * MAX_VERTICES * sizeof(char *));
+    if (!arestas) {
+        free(saida); // Libera a outra memória alocada antes de sair
+        return NULL;
+    }
+    size_t n_arestas = 0;
+    for (int i = 0; i < n; i++)
+        if (!vis[i])
+            dfs(i, -1, vmap, n, vis, tin, low, &tempo, arestas, &n_arestas);    
+
+    // Ordena as strings de arestas
+    qsort(arestas, n_arestas, sizeof(char *), comparar_strings);
+
+    // Concatena na saída
+    for (size_t i = 0; i < n_arestas; i++) {
+        strcat(saida, arestas[i]);
+        strcat(saida, " ");
+        free(arestas[i]);
+    }
+
+    free(arestas); 
+
+    // Remove o espaço extra final
+    size_t len = strlen(saida);
+    if (len > 0 && saida[len - 1] == ' ')
+        saida[len - 1] = '\0';
+
+    return saida;
 }
